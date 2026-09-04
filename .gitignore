@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+CACHEDIR.TAG
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.npm
+*.tsbuildinfo
+
+# AI & Binaries
+bins/
+*.zip
+*.tar.gz
+*.pt
+*.onnx
+*.engine
+.paddlex/
+yolo11n.pt
+ai/models/*.pt
+ai/models/*.onnx
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.log
+
+# Media / Evidence Temp storage
+evidence_storage/snapshots/*.jpg
+evidence_storage/clips/*.mp4
+evidence/snapshots/*.jpg
+evidence/clips/*.mp4
+*.db
+*.sqlite3
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

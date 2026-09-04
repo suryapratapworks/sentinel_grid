@@ -1,0 +1,162 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================
+   SENTINEL GRID — Theme System
+   CSS Custom Properties switch between dark (default) & light
+   ========================================================= */
+
+/* --- DARK MODE (default) --- */
+:root,
+html.dark {
+  --color-base:         #0b0f19;
+  --color-surface:      #111827;
+  --color-elevated:     #1a2235;
+  --color-nav:          #0d1117;
+  --color-border:       #1e293b;
+  --color-border-soft:  rgba(30, 41, 59, 0.8);
+
+  --color-text-primary:   #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted:     #64748b;
+
+  /* card bg overrides */
+  --card-bg-deep:   #0b0f19;
+  --card-bg:        #111827;
+  --card-bg-footer: #0e1422;
+
+  color-scheme: dark;
+}
+
+/* --- LIGHT MODE --- */
+html.light {
+  --color-base:         #eef2f7;
+  --color-surface:      #ffffff;
+  --color-elevated:     #f8fafc;
+  --color-nav:          #1e293b;
+  --color-border:       #e2e8f0;
+  --color-border-soft:  rgba(226, 232, 240, 0.8);
+
+  --color-text-primary:   #0f172a;
+  --color-text-secondary: #334155;
+  --color-text-muted:     #64748b;
+
+  --card-bg-deep:   #eef2f7;
+  --card-bg:        #ffffff;
+  --card-bg-footer: #f1f5f9;
+
+  color-scheme: light;
+}
+
+/* =========================================================
+   BASE STYLES
+   ========================================================= */
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-base);
+  color: var(--color-text-primary);
+}
+
+/* scrollbar - dark */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--color-base); }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* =========================================================
+   LIGHT MODE OVERRIDES
+   These override the hardcoded Tailwind hex-color classes
+   used throughout the component tree.
+   ========================================================= */
+
+/* --- Backgrounds --- */
+html.light .bg-\[\#0b0f19\]  { background-color: var(--card-bg-deep)   !important; }
+html.light .bg-\[\#111827\]  { background-color: var(--card-bg)        !important; }
+html.light .bg-\[\#0e1422\]  { background-color: var(--card-bg-footer) !important; }
+html.light .bg-\[\#151e32\]  { background-color: #f0f4f8               !important; }
+html.light .bg-\[\#1a2235\]  { background-color: #f0f4f8               !important; }
+
+/* Slate surface overrides */
+html.light .bg-slate-900     { background-color: #f1f5f9 !important; }
+html.light .bg-slate-900\/90 { background-color: rgba(241,245,249,0.95) !important; }
+html.light .bg-slate-800     { background-color: #e2e8f0 !important; }
+html.light .bg-slate-800\/40 { background-color: rgba(226,232,240,0.4) !important; }
+html.light .bg-slate-800\/60 { background-color: rgba(226,232,240,0.6) !important; }
+html.light .bg-slate-800\/80 { background-color: rgba(226,232,240,0.8) !important; }
+
+/* Hover states */
+html.light .hover\:bg-slate-800\/60:hover { background-color: rgba(226,232,240,0.6) !important; }
+html.light .hover\:bg-slate-800:hover     { background-color: #d1d5db !important; }
+html.light .hover\:bg-slate-700:hover     { background-color: #cbd5e1 !important; }
+
+/* --- Borders --- */
+html.light .border-slate-800     { border-color: #e2e8f0 !important; }
+html.light .border-slate-800\/80 { border-color: rgba(226,232,240,0.8) !important; }
+html.light .border-slate-700     { border-color: #cbd5e1 !important; }
+html.light .border-slate-700\/80 { border-color: rgba(203,213,225,0.8) !important; }
+html.light .border-slate-700\/60 { border-color: rgba(203,213,225,0.6) !important; }
+
+/* Divide lines */
+html.light .divide-slate-800\/80 > * + * { border-color: rgba(226,232,240,0.8) !important; }
+
+/* --- Text colors --- */
+html.light .text-white      { color: #0f172a !important; }
+html.light .text-slate-100  { color: #1e293b !important; }
+html.light .text-slate-200  { color: #334155 !important; }
+html.light .text-slate-300  { color: #475569 !important; }
+html.light .text-slate-400  { color: #64748b !important; }
+html.light .text-slate-500  { color: #94a3b8 !important; }
+
+/* --- Form inputs --- */
+html.light input,
+html.light select,
+html.light textarea {
+  background-color: var(--card-bg-deep) !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+html.light input::placeholder  { color: #94a3b8 !important; }
+
+/* --- Gradient headers --- */
+html.light .from-\[\#111827\] { --tw-gradient-from: #ffffff !important; }
+html.light .via-\[\#151e32\]  { --tw-gradient-via:  #f0f4f8 !important; }
+html.light .to-\[\#111827\]   { --tw-gradient-to:   #ffffff !important; }
+
+/* --- Table tweaks in light mode --- */
+html.light thead  { background-color: #f1f5f9 !important; }
+html.light tbody tr:hover { background-color: rgba(226,232,240,0.5) !important; }
+
+/* --- Modal overlays --- */
+html.light .fixed.inset-0.bg-black\/70 { background-color: rgba(15,23,42,0.55) !important; }
+
+/* =========================================================
+   RADAR / PULSE ANIMATIONS (unchanged)
+   ========================================================= */
+@keyframes radar-sweep {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.radar-sweep {
+  animation: radar-sweep 3s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+.pulse-ring {
+  animation: pulse-ring 2s ease-out infinite;
+}

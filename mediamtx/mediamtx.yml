@@ -1,0 +1,20 @@
+logLevel: info
+logDestinations: [stdout]
+api: yes
+apiAddress: :9997
+rtsp: yes
+rtspAddress: :8554
+rtpAddress: :8002
+rtcpAddress: :8003
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+webrtc: yes
+webrtcAddress: :8889
+paths:
+  phone_cam:
+    source: rtsp://192.168.1.100:8080/h264_ulaw.sdp
+    sourceOnDemand: yes

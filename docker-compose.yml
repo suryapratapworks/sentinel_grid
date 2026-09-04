@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # 1. Spatial Database
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: sentinel_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel_grid}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-sentinel_grid}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # 3. MediaMTX Video Relay
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: sentinel_mediamtx
+    restart: unless-stopped
+    ports:
+      - "8554:8554"   # RTSP
+      - "8888:8888"   # HLS
+      - "8889:8889"   # WebRTC
+      - "9997:9997"   # API
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+
+  # 4. FastAPI Backend API Gateway
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: sentinel_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-sentinel_grid}}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - MEDIAMTX_HLS_BASE=${MEDIAMTX_HLS_BASE:-http://localhost:8888}
+      - MEDIAMTX_WEBRTC_BASE=${MEDIAMTX_WEBRTC_BASE:-http://localhost:8889}
+      - SECRET_KEY=${SECRET_KEY:-SENTINEL_GRID_SUPER_SECRET_KEY_PRODUCTION_GRADE_2026}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./evidence_storage:/app/evidence_storage
+
+  # 5. React Frontend + Nginx
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: sentinel_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - mediamtx
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
