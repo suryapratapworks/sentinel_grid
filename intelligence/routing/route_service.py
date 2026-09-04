@@ -1,4 +1,4 @@
-﻿import math
+import math
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from backend.app.models.models import Vehicle, VehicleSighting, Camera
@@ -24,7 +24,7 @@ class RouteReconstructionService:
         sightings = (
             db.query(VehicleSighting)
             .filter(VehicleSighting.vehicle_id == vehicle.id)
-            .order_by(VehicleSighting.timestamp.asc(), VehicleSighting.pts_ms.asc())
+            .order_by(VehicleSighting.pts_ms.asc(), VehicleSighting.timestamp.asc())
             .all()
         )
 

@@ -170,7 +170,7 @@ def update_camera(camera_id: str, payload: CameraUpdate, db: Session = Depends(g
     if not cam:
         raise HTTPException(status_code=404, detail="Camera not found")
 
-    update_data = payload.dict(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(cam, key, value)
 
