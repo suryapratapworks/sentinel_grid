@@ -34,6 +34,7 @@ class CameraStreamCreate(BaseModel):
 class CameraStreamResponse(BaseModel):
     id: str
     stream_type: str
+    stream_url: Optional[str] = None
     codec: str
     resolution: str
     bitrate: int
