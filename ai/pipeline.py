@@ -71,39 +71,88 @@ class ANPRPipeline:
     def _run_loop(self):
         """Main processing loop — reads RTSP/HTTP, runs AI, fires ANPR events."""
         import os
+        import re
+        import urllib.request
         os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
         backoff = 2.0
-        
+
+        # Determine candidate snapshot endpoints for mobile IP webcams
+        ip_match = re.search(r'(?:https?|rtsp)://([^/]+)', self.rtsp_url)
+        phone_host = ip_match.group(1) if ip_match else None
+        shot_url = f"http://{phone_host}/shot.jpg" if phone_host and ("8080" in phone_host) else None
+        backend_snapshot_url = f"http://localhost:8000/api/cameras/{self.camera_id}/snapshot"
+
         while self._running:
+            # 1. Try standard OpenCV VideoCapture
             cap = cv2.VideoCapture(self.rtsp_url)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            
-            if not cap.isOpened():
-                logger.warning(f'Waiting for camera stream connection: {self.rtsp_url} (retry in {backoff:.1f}s)')
-                time.sleep(backoff)
-                backoff = min(backoff * 1.5, 30.0)
-                continue
-            
-            backoff = 2.0  # reset on success
-            logger.info(f'Stream connected: {self.rtsp_url}')
-            
-            while self._running:
-                ret, frame = cap.read()
-                if not ret:
-                    logger.warning('Frame read failed — reconnecting')
-                    break
-                
-                self._frame_count += 1
-                
-                # Skip frames for CPU performance
-                if self._frame_count % self.frame_skip != 0:
+
+            if cap.isOpened():
+                ret, test_frame = cap.read()
+                if ret and test_frame is not None:
+                    logger.info(f'Stream connected via VideoCapture: {self.rtsp_url}')
+                    backoff = 2.0
+                    while self._running:
+                        ret, frame = cap.read()
+                        if not ret:
+                            logger.warning('VideoCapture frame read failed — reconnecting...')
+                            break
+                        self._frame_count += 1
+                        if self._frame_count % self.frame_skip != 0:
+                            continue
+                        pts_ms = int(time.time() * 1000)
+                        self._process_frame(frame, pts_ms)
+                    cap.release()
                     continue
-                
-                pts_ms = int(time.time() * 1000)
-                self._process_frame(frame, pts_ms)
-            
+
             cap.release()
-        
+
+            # 2. Fallback: Direct Snapshot Polling (Bypasses ffmpeg TCP socket timeouts on Android)
+            candidate_urls = [u for u in [shot_url, backend_snapshot_url] if u]
+            snapshot_success = False
+            for target_url in candidate_urls:
+                try:
+                    req = urllib.request.Request(target_url, headers={"User-Agent": "SentinelGrid/1.0"})
+                    with urllib.request.urlopen(req, timeout=2.5) as resp:
+                        img_bytes = resp.read()
+                        if img_bytes:
+                            frame = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+                            if frame is not None:
+                                logger.info(f'Stream connected via High-Reliability Poller: {target_url}')
+                                snapshot_success = True
+                                backoff = 2.0
+                                while self._running:
+                                    t_start = time.time()
+                                    try:
+                                        with urllib.request.urlopen(req, timeout=3.0) as s_resp:
+                                            b = s_resp.read()
+                                            f = cv2.imdecode(np.frombuffer(b, np.uint8), cv2.IMREAD_COLOR)
+                                            if f is not None:
+                                                pts_ms = int(time.time() * 1000)
+                                                self._process_frame(f, pts_ms)
+                                    except Exception:
+                                        logger.warning('Poller frame dropped — reconnecting...')
+                                        break
+                                    # Pace frame rate for optimal CPU inference (~8 fps)
+                                    elapsed = time.time() - t_start
+                                    target_interval = 0.12
+                                    if elapsed < target_interval:
+                                        time.sleep(target_interval - elapsed)
+                                break
+                except Exception:
+                    pass
+                if snapshot_success:
+                    break
+
+            if not snapshot_success and self._running:
+                host_hint = phone_host or self.rtsp_url
+                logger.warning(
+                    f'Camera stream unreachable at {host_hint}. '
+                    f'Ensure IP Webcam is running, phone screen is ON, and on the same Wi-Fi. (Retrying in {backoff:.1f}s)'
+                )
+                time.sleep(backoff)
+                backoff = min(backoff * 1.5, 8.0)
+
         logger.info('ANPR pipeline loop ended')
     
     def _process_frame(self, frame: np.ndarray, pts_ms: int):
