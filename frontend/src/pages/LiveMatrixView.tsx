@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Video, Wifi, WifiOff, Maximize2, RefreshCw, Radio } from 'lucide-react';
+import { Video, Wifi, WifiOff, Maximize2, RefreshCw, Radio, Smartphone, AlertCircle, RotateCw } from 'lucide-react';
 import { Camera } from '../types';
 import { useHLSPlayer } from '../hooks/useHLSPlayer';
 
@@ -14,76 +14,165 @@ const HLSVideoCell: React.FC<{ camera: Camera; isActive: boolean }> = ({ camera,
   const videoRef = useRef<HTMLVideoElement>(null);
   const slug = camera.camera_code.toLowerCase().replace(/-/g, '_');
   const hlsUrl = isActive ? `http://localhost:8888/${slug}/index.m3u8` : null;
-  const [hlsError, setHlsError] = useState(false);
 
-  useHLSPlayer(videoRef, hlsUrl);
+  const [streamError, setStreamError] = useState(false);
+  const [streamLoaded, setStreamLoaded] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
-  const rawStreamUrl = camera.streams && camera.streams.length > 0 
-    ? (camera.streams[0] as any).stream_url_encrypted || '' 
+  // Extract raw stream URL and host
+  const rawStreamUrl = (camera.streams && camera.streams.length > 0 && camera.streams[0].stream_url) 
+    ? camera.streams[0].stream_url 
     : '';
 
-  const ipMatch = rawStreamUrl.match(/https?:\/\/([^/]+)/) || rawStreamUrl.match(/rtsp:\/\/([^/]+)/);
-  const directHttpUrl = ipMatch ? `http://${ipMatch[1]}/video` : null;
+  const ipMatch = rawStreamUrl.match(/(?:https?|rtsp):\/\/([^/]+)/);
+  const targetHost = ipMatch ? ipMatch[1] : '';
+
+  // Determine if camera is a phone or IP Webcam
+  const isPhoneOrHttp = camera.protocol === 'HTTP' || 
+                        camera.vendor.toLowerCase().includes('phone') || 
+                        camera.vendor.toLowerCase().includes('mobile') || 
+                        camera.vendor.toLowerCase().includes('webcam') ||
+                        rawStreamUrl.includes('8080');
+
+  // Stream mode: 'proxy' (backend live MJPEG) or 'hls' (MediaMTX)
+  const [useProxy, setUseProxy] = useState(isPhoneOrHttp);
+
+  useHLSPlayer(videoRef, (!useProxy && isActive) ? hlsUrl : null, {
+    onError: () => {
+      // HLS failed, auto fallback to backend live MJPEG proxy
+      setUseProxy(true);
+    },
+    onPlaying: () => {
+      setStreamLoaded(true);
+      setStreamError(false);
+    }
+  });
+
+  const handleRetry = () => {
+    setStreamError(false);
+    setStreamLoaded(false);
+    setRetryCount(prev => prev + 1);
+  };
+
+  const proxyUrl = `/api/cameras/${camera.id}/live?k=${retryCount}`;
 
   return (
-    <div className="relative w-full h-full bg-black rounded overflow-hidden group">
-      {isActive && directHttpUrl ? (
-        <img
-          src={directHttpUrl}
-          alt={camera.name}
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            (e.target as any).style.display = 'none';
-          }}
-        />
-      ) : isActive && !hlsError ? (
-        <video
-          ref={videoRef}
-          className="w-full h-full object-cover"
-          muted
-          playsInline
-          autoPlay
-          onError={() => setHlsError(true)}
-        />
-      ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-[#0b0f19] text-slate-600">
-          <Video className="w-8 h-8 mb-2 opacity-30" />
-          <p className="text-xs font-mono opacity-50">
-            {camera.status === 'ONLINE' ? 'Connecting live stream...' : 'Camera Offline'}
+    <div className="relative w-full h-full bg-[#080c14] rounded overflow-hidden group">
+      {isActive && !streamError ? (
+        useProxy ? (
+          <img
+            key={`stream-${camera.id}-${retryCount}`}
+            src={proxyUrl}
+            alt={camera.name}
+            className="w-full h-full object-cover"
+            onLoad={() => {
+              setStreamLoaded(true);
+              setStreamError(false);
+            }}
+            onError={() => {
+              setStreamError(true);
+              setStreamLoaded(false);
+            }}
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover"
+            muted
+            playsInline
+            autoPlay
+            onError={() => {
+              setUseProxy(true);
+            }}
+          />
+        )
+      ) : null}
+
+      {/* Offline or Error Diagnostic Card */}
+      {(streamError || !isActive) && (
+        <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-[#0b0f19] text-center">
+          <div className="w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mb-2">
+            {isPhoneOrHttp ? (
+              <Smartphone className="w-5 h-5 text-rose-400" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-400" />
+            )}
+          </div>
+          <p className="text-xs font-bold text-slate-200">
+            {isPhoneOrHttp ? 'Phone Camera Offline / Unreachable' : 'Stream Feed Offline'}
           </p>
-          <p className="text-[10px] font-mono text-cyan-700 mt-1 opacity-60">
-            localhost:8888/{slug}/index.m3u8
-          </p>
+          {targetHost && (
+            <p className="text-[11px] font-mono text-cyan-400 mt-0.5">
+              {targetHost}
+            </p>
+          )}
+
+          {isPhoneOrHttp && (
+            <div className="mt-2 text-[10px] text-slate-400 font-mono space-y-0.5 max-w-[220px]">
+              <p>1. Open IP Webcam app on phone</p>
+              <p>2. Tap "Start server" at bottom</p>
+              <p>3. Keep screen unlocked on same Wi-Fi</p>
+            </div>
+          )}
+
+          <button
+            onClick={handleRetry}
+            className="mt-3 inline-flex items-center gap-1.5 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/40 px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer"
+          >
+            <RotateCw className="w-3 h-3" />
+            <span>Reconnect Stream</span>
+          </button>
         </div>
       )}
 
-      {/* Overlay */}
+      {/* Live HUD Overlay */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Top bar */}
-        <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent p-2 flex justify-between items-start">
+        <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent p-2 flex justify-between items-start pointer-events-auto">
           <div>
-            <div className="text-white text-xs font-bold font-mono">{camera.camera_code}</div>
+            <div className="text-white text-xs font-bold font-mono flex items-center gap-1.5">
+              <span>{camera.camera_code}</span>
+              {isPhoneOrHttp && (
+                <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[9px] px-1 py-0.2 rounded font-sans">
+                  PHONE
+                </span>
+              )}
+            </div>
             <div className="text-slate-400 text-[10px] font-mono">{camera.name}</div>
           </div>
-          <div className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${
-            camera.status === 'ONLINE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
-          }`}>
-            {camera.status === 'ONLINE' ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
-            {camera.status}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                setUseProxy(!useProxy);
+                handleRetry();
+              }}
+              title={`Switch stream engine (currently: ${useProxy ? 'MJPEG Live' : 'HLS Relay'})`}
+              className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer"
+            >
+              {useProxy ? 'LIVE' : 'HLS'}
+            </button>
+            <div className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              isActive && !streamError ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+            }`}>
+              {isActive && !streamError ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
+              {isActive && !streamError ? 'ONLINE' : 'OFFLINE'}
+            </div>
           </div>
         </div>
 
         {/* Bottom bar */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex justify-between items-end">
-          <span className="text-[10px] font-mono text-slate-400">{camera.protocol} | {camera.codec}</span>
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 flex justify-between items-end">
+          <span className="text-[10px] font-mono text-slate-400">
+            {camera.protocol} | {camera.codec}
+          </span>
           <div className="flex items-center gap-1">
-            {camera.status === 'ONLINE' && (
+            {isActive && !streamError && (
               <span className="flex items-center gap-0.5 text-[10px] text-red-400 font-bold">
                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
                 LIVE
               </span>
             )}
-            <span className="text-[10px] font-mono text-slate-500">{camera.fps}fps</span>
+            <span className="text-[10px] font-mono text-slate-400">{camera.fps}fps</span>
           </div>
         </div>
       </div>

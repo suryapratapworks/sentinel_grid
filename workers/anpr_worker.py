@@ -59,7 +59,7 @@ def get_or_find_camera() -> tuple[str, str]:
             cam_id = target_cam['id']
             stream_url = f'http://{PHONE_IP}:{PHONE_PORT}/video'
             if target_cam.get('streams') and len(target_cam['streams']) > 0:
-                s_url = target_cam['streams'][0].get('stream_url_encrypted', '')
+                s_url = target_cam['streams'][0].get('stream_url') or target_cam['streams'][0].get('stream_url_encrypted', '')
                 if '192.168.' in s_url or '10.' in s_url:
                     # Convert RTSP url to HTTP video url for OpenCV performance
                     import re

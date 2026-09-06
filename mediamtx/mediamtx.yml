@@ -15,6 +15,9 @@ hlsSegmentDuration: 1s
 webrtc: yes
 webrtcAddress: :8889
 paths:
+  all_others:
+    rtspTransport: tcp
   phone_cam:
     source: rtsp://192.168.1.100:8080/h264_ulaw.sdp
     sourceOnDemand: yes
+    rtspTransport: tcp

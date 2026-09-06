@@ -246,8 +246,8 @@ export const CameraRegistryView: React.FC<CameraRegistryViewProps> = ({ cameras,
                 setNewCamCode('CAM-PHONE-001');
                 setNewCamName('Mobile Patrol Unit 1');
                 setNewCamVendor('Mobile IP Camera');
-                setNewCamProtocol('RTSP');
-                setNewCamStreamUrl('rtsp://192.168.1.100:8080/h264_ulaw.sdp');
+                setNewCamProtocol('HTTP');
+                setNewCamStreamUrl('http://192.168.1.100:8080/video');
                 setShowAddModal(true);
               }}
               className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg shadow-cyan-500/20 transition-all cursor-pointer font-mono"
@@ -408,10 +408,10 @@ export const CameraRegistryView: React.FC<CameraRegistryViewProps> = ({ cameras,
               </div>
 
               <div>
-                <label className="block text-muted mb-1 text-[11px]">Live Stream URL (RTSP / Phone)</label>
+                <label className="block text-muted mb-1 text-[11px]">Live Stream URL (Phone IP Webcam / RTSP / HTTP)</label>
                 <input
                   type="text"
-                  placeholder="rtsp://192.168.1.100:8080/h264_ulaw.sdp"
+                  placeholder="e.g. http://192.168.1.100:8080/video or rtsp://..."
                   value={newCamStreamUrl}
                   onChange={(e) => setNewCamStreamUrl(e.target.value)}
                   className="w-full bg-base border border-border rounded-lg p-2 text-primary focus:outline-none focus:border-cyan-500"

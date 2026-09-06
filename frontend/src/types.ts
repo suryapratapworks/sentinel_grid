@@ -1,6 +1,7 @@
 export interface CameraStream {
   id: string;
   stream_type: string;
+  stream_url?: string;
   codec: string;
   resolution: string;
   bitrate: number;

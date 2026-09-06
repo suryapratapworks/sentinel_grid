@@ -52,7 +52,7 @@ def start_backend():
     log("Backend", "Starting FastAPI server...")
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "backend.app.main:app",
-         "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "warning"],
+         "--host", "0.0.0.0", "--port", "8000", "--log-level", "warning"],
         cwd=ROOT
     )
     processes.append(proc)
