@@ -58,16 +58,39 @@ def get_or_find_camera() -> tuple[str, str]:
         if target_cam:
             cam_id = target_cam['id']
             stream_url = f'http://{PHONE_IP}:{PHONE_PORT}/video'
+            target_host = PHONE_IP
+            target_p = PHONE_PORT
+
             if target_cam.get('streams') and len(target_cam['streams']) > 0:
                 s_url = target_cam['streams'][0].get('stream_url') or target_cam['streams'][0].get('stream_url_encrypted', '')
-                if '192.168.' in s_url or '10.' in s_url:
-                    # Convert RTSP url to HTTP video url for OpenCV performance
-                    import re
-                    m = re.search(r'(192\.168\.\d+\.\d+):(\d+)', s_url)
-                    if m:
-                        stream_url = f'http://{m.group(1)}:{m.group(2)}/video'
-                    else:
-                        stream_url = s_url
+                import re
+                m = re.search(r'(?:https?|rtsp)://([^/:]+)(?::(\d+))?', s_url)
+                if m:
+                    target_host = m.group(1)
+                    target_p = m.group(2) or PHONE_PORT
+                    stream_url = f'http://{target_host}:{target_p}/video'
+                elif s_url:
+                    stream_url = s_url
+
+            # Verify if target host is active or auto-discover on local Wi-Fi
+            import socket
+            def ping_port(h, p):
+                try:
+                    with socket.create_connection((h, int(p)), timeout=0.6):
+                        return True
+                except Exception:
+                    return False
+
+            if not ping_port(target_host, target_p) and target_host.startswith('192.168.'):
+                prefix = target_host.rsplit('.', 1)[0]
+                for i in range(2, 25):
+                    candidate = f'{prefix}.{i}'
+                    if candidate != target_host and ping_port(candidate, target_p):
+                        logger.info(f"Phone IP detected at {candidate}:{target_p} (updated from {target_host})")
+                        target_host = candidate
+                        stream_url = f'http://{candidate}:{target_p}/video'
+                        break
+
             logger.info(f"Found camera: {target_cam['camera_code']} ({cam_id}) -> {stream_url}")
             return cam_id, stream_url
     except Exception as e:

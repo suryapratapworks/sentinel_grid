@@ -72,86 +72,122 @@ class ANPRPipeline:
         """Main processing loop — reads RTSP/HTTP, runs AI, fires ANPR events."""
         import os
         import re
+        import socket
         import urllib.request
         os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
+        os.environ['OPENCV_FFMPEG_LOGLEVEL'] = '-8'  # Suppress raw FFmpeg C-layer error spam
         backoff = 2.0
 
-        # Determine candidate snapshot endpoints for mobile IP webcams
-        ip_match = re.search(r'(?:https?|rtsp)://([^/]+)', self.rtsp_url)
-        phone_host = ip_match.group(1) if ip_match else None
-        shot_url = f"http://{phone_host}/shot.jpg" if phone_host and ("8080" in phone_host) else None
-        backend_snapshot_url = f"http://localhost:8000/api/cameras/{self.camera_id}/snapshot"
+        def is_reachable(host, port, timeout=0.8):
+            try:
+                with socket.create_connection((host, int(port)), timeout=timeout):
+                    return True
+            except Exception:
+                return False
 
         while self._running:
-            # 1. Try standard OpenCV VideoCapture
-            cap = cv2.VideoCapture(self.rtsp_url)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            # Parse target host and port
+            ip_match = re.search(r'(?:https?|rtsp)://([^/:]+)(?::(\d+))?', self.rtsp_url)
+            target_ip = ip_match.group(1) if ip_match else None
+            target_port = int(ip_match.group(2)) if (ip_match and ip_match.group(2)) else 8080
 
-            if cap.isOpened():
-                ret, test_frame = cap.read()
-                if ret and test_frame is not None:
-                    logger.info(f'Stream connected via VideoCapture: {self.rtsp_url}')
-                    backoff = 2.0
-                    while self._running:
-                        ret, frame = cap.read()
-                        if not ret:
-                            logger.warning('VideoCapture frame read failed — reconnecting...')
-                            break
-                        self._frame_count += 1
-                        if self._frame_count % self.frame_skip != 0:
-                            continue
-                        pts_ms = int(time.time() * 1000)
-                        self._process_frame(frame, pts_ms)
-                    cap.release()
-                    continue
+            # 1. Pre-flight check: test if endpoint is reachable before letting FFmpeg attempt connection
+            reachable = is_reachable(target_ip, target_port, timeout=0.8) if target_ip else True
 
-            cap.release()
+            # If not reachable and on local Wi-Fi, try rapid subnet auto-discovery for shifted phone IP
+            if not reachable and target_ip and target_ip.startswith("192.168."):
+                subnet_prefix = target_ip.rsplit(".", 1)[0]
+                for i in range(2, 25):
+                    candidate_ip = f"{subnet_prefix}.{i}"
+                    if candidate_ip != target_ip and is_reachable(candidate_ip, target_port, timeout=0.06):
+                        try:
+                            req = urllib.request.Request(f"http://{candidate_ip}:{target_port}/", headers={"User-Agent": "SentinelGrid/1.0"})
+                            with urllib.request.urlopen(req, timeout=0.8) as resp:
+                                if "IP Webcam" in resp.headers.get("Server", "") or resp.getcode() == 200:
+                                    logger.info(f"Phone IP auto-detected on local Wi-Fi: {candidate_ip}:{target_port}")
+                                    self.rtsp_url = f"http://{candidate_ip}:{target_port}/video"
+                                    target_ip = candidate_ip
+                                    reachable = True
+                                    break
+                        except Exception:
+                            pass
+                    if reachable:
+                        break
 
-            # 2. Fallback: Direct Snapshot Polling (Bypasses ffmpeg TCP socket timeouts on Android)
+            # 2. If endpoint is verified reachable, connect with VideoCapture
+            if reachable:
+                cap = cv2.VideoCapture(self.rtsp_url)
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+                if cap.isOpened():
+                    ret, test_frame = cap.read()
+                    if ret and test_frame is not None:
+                        logger.info(f"Camera stream connected: {self.rtsp_url}")
+                        backoff = 2.0
+                        while self._running:
+                            ret, frame = cap.read()
+                            if not ret:
+                                logger.warning("Stream frame read dropped — reconnecting...")
+                                break
+                            self._frame_count += 1
+                            if self._frame_count % self.frame_skip != 0:
+                                continue
+                            pts_ms = int(time.time() * 1000)
+                            self._process_frame(frame, pts_ms)
+                        cap.release()
+                        continue
+                cap.release()
+
+            # 3. Fallback: Direct Snapshot Polling (Ultra-resilient for Android IP Webcam)
+            phone_host = f"{target_ip}:{target_port}" if target_ip else None
+            shot_url = f"http://{phone_host}/shot.jpg" if phone_host else None
+            backend_snapshot_url = f"http://localhost:8000/api/cameras/{self.camera_id}/snapshot"
+
             candidate_urls = [u for u in [shot_url, backend_snapshot_url] if u]
             snapshot_success = False
-            for target_url in candidate_urls:
-                try:
-                    req = urllib.request.Request(target_url, headers={"User-Agent": "SentinelGrid/1.0"})
-                    with urllib.request.urlopen(req, timeout=2.5) as resp:
-                        img_bytes = resp.read()
-                        if img_bytes:
-                            frame = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
-                            if frame is not None:
-                                logger.info(f'Stream connected via High-Reliability Poller: {target_url}')
-                                snapshot_success = True
-                                backoff = 2.0
-                                while self._running:
-                                    t_start = time.time()
-                                    try:
-                                        with urllib.request.urlopen(req, timeout=3.0) as s_resp:
-                                            b = s_resp.read()
-                                            f = cv2.imdecode(np.frombuffer(b, np.uint8), cv2.IMREAD_COLOR)
-                                            if f is not None:
-                                                pts_ms = int(time.time() * 1000)
-                                                self._process_frame(f, pts_ms)
-                                    except Exception:
-                                        logger.warning('Poller frame dropped — reconnecting...')
-                                        break
-                                    # Pace frame rate for optimal CPU inference (~8 fps)
-                                    elapsed = time.time() - t_start
-                                    target_interval = 0.12
-                                    if elapsed < target_interval:
-                                        time.sleep(target_interval - elapsed)
-                                break
-                except Exception:
-                    pass
-                if snapshot_success:
-                    break
+
+            if reachable:
+                for target_url in candidate_urls:
+                    try:
+                        req = urllib.request.Request(target_url, headers={"User-Agent": "SentinelGrid/1.0"})
+                        with urllib.request.urlopen(req, timeout=2.0) as resp:
+                            img_bytes = resp.read()
+                            if img_bytes:
+                                frame = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+                                if frame is not None:
+                                    logger.info(f"Stream connected via Snapshot Poller: {target_url}")
+                                    snapshot_success = True
+                                    backoff = 2.0
+                                    while self._running:
+                                        t_start = time.time()
+                                        try:
+                                            with urllib.request.urlopen(req, timeout=2.5) as s_resp:
+                                                b = s_resp.read()
+                                                f = cv2.imdecode(np.frombuffer(b, np.uint8), cv2.IMREAD_COLOR)
+                                                if f is not None:
+                                                    pts_ms = int(time.time() * 1000)
+                                                    self._process_frame(f, pts_ms)
+                                        except Exception:
+                                            logger.warning("Snapshot frame dropped — retrying...")
+                                            break
+                                        elapsed = time.time() - t_start
+                                        target_interval = 0.12
+                                        if elapsed < target_interval:
+                                            time.sleep(target_interval - elapsed)
+                                    break
+                    except Exception:
+                        pass
+                    if snapshot_success:
+                        break
 
             if not snapshot_success and self._running:
-                host_hint = phone_host or self.rtsp_url
+                host_hint = f"{target_ip}:{target_port}" if target_ip else self.rtsp_url
                 logger.warning(
-                    f'Camera stream unreachable at {host_hint}. '
-                    f'Ensure IP Webcam is running, phone screen is ON, and on the same Wi-Fi. (Retrying in {backoff:.1f}s)'
+                    f"Camera stream unreachable at {host_hint}. "
+                    f"Please open IP Webcam on phone, ensure screen is ON, and tap 'Start server'. (Auto-reconnecting in {backoff:.1f}s)"
                 )
                 time.sleep(backoff)
-                backoff = min(backoff * 1.5, 8.0)
+                backoff = min(backoff * 1.4, 6.0)
 
         logger.info('ANPR pipeline loop ended')
     
