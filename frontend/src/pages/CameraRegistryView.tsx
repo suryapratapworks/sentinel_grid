@@ -69,11 +69,6 @@ export const CameraRegistryView: React.FC<CameraRegistryViewProps> = ({ cameras,
   };
 
   const handleDeleteCamera = async (cam: Camera) => {
-    if (!isSuperAdmin) {
-      alert('Unauthorized: Only Super Administrators can delete cameras from the registry.');
-      return;
-    }
-
     const confirmDelete = window.confirm(
       `⚠️ PERMANENT CAMERA REMOVAL\n\nAre you sure you want to permanently delete this camera?\n\nCode: ${cam.camera_code}\nName: ${cam.name}\nDepartment: ${cam.department_name || 'General'}\n\nThis action cannot be undone.`
     );
@@ -89,6 +84,21 @@ export const CameraRegistryView: React.FC<CameraRegistryViewProps> = ({ cameras,
       alert(`Delete error: ${err.message}`);
     } finally {
       setDeletingCamId(null);
+    }
+  };
+
+  const handlePurgeAll = async () => {
+    const confirmPurge = window.confirm(
+      `🚨 DANGER: PURGE ALL CAMERAS\n\nAre you sure you want to delete ALL registered cameras and associated live data from the system?\n\nThis action cannot be undone.`
+    );
+    if (!confirmPurge) return;
+
+    try {
+      const res = await api.purgeAllCameras();
+      setSyncFeedback(res.message);
+      onRefresh();
+    } catch (err: any) {
+      alert(`Purge error: ${err.message}`);
     }
   };
 
@@ -139,6 +149,17 @@ export const CameraRegistryView: React.FC<CameraRegistryViewProps> = ({ cameras,
         </div>
 
         <div className="flex items-center gap-2">
+          {cameras.length > 0 && (
+            <button
+              onClick={handlePurgeAll}
+              className="flex items-center gap-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/50 text-xs font-bold px-3.5 py-2 rounded-lg transition-all cursor-pointer"
+              title="Purge all cameras from live registry"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Purge All Cameras ({cameras.length})</span>
+            </button>
+          )}
+
           <button
             onClick={handleCatalogueSync}
             disabled={syncingCatalogue}
@@ -291,17 +312,15 @@ export const CameraRegistryView: React.FC<CameraRegistryViewProps> = ({ cameras,
                         >
                           Locate on GIS
                         </button>
-                        {isSuperAdmin && (
-                          <button
-                            onClick={() => handleDeleteCamera(cam)}
-                            disabled={deletingCamId === cam.id}
-                            title="Delete Camera (Super Admin Privilege)"
-                            className="inline-flex items-center gap-1 bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 hover:text-rose-300 border border-rose-500/30 px-2 py-1 rounded text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>{deletingCamId === cam.id ? 'Deleting...' : 'Delete'}</span>
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleDeleteCamera(cam)}
+                          disabled={deletingCamId === cam.id}
+                          title="Delete Camera from Registry"
+                          className="inline-flex items-center gap-1 bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 hover:text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>{deletingCamId === cam.id ? 'Deleting...' : 'Delete'}</span>
+                        </button>
                       </div>
                     </td>
                   </tr>

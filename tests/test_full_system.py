@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from backend.app.main import app
 from backend.app.core.database import Base, engine, SessionLocal
 from backend.app.services.seed_data import seed_database
-from backend.app.models.models import Camera, Department, Watchlist, WatchlistEntry, Vehicle, VehicleSighting, Evidence
+from backend.app.models.models import Camera, Department, Watchlist, WatchlistEntry, Vehicle, VehicleSighting, Evidence, Event, CameraStream, Alert
 from analytics.anpr.plate_engine import PlateEngine
 from evidence.locker import EvidenceLocker
 from federation.adapters.rtsp_adapter import RTSPAdapter
@@ -28,6 +28,21 @@ def client():
     
     with TestClient(app) as test_client:
         yield test_client
+
+    # Teardown: purge test artifacts so live database is left with ZERO dummy data
+    db = SessionLocal()
+    try:
+        db.query(Alert).delete(synchronize_session=False)
+        db.query(Evidence).delete(synchronize_session=False)
+        db.query(VehicleSighting).delete(synchronize_session=False)
+        db.query(Event).delete(synchronize_session=False)
+        db.query(Vehicle).delete(synchronize_session=False)
+        db.query(WatchlistEntry).delete(synchronize_session=False)
+        db.query(CameraStream).delete(synchronize_session=False)
+        db.query(Camera).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
 
 # ==============================================================================
 # Tier 1: Health & Diagnostics

@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
-from backend.app.models.models import Camera, CameraStream, Department, Adapter, Event, VehicleSighting
+from backend.app.models.models import Camera, CameraStream, Department, Adapter, Event, VehicleSighting, Alert, Evidence
 from backend.app.schemas.schemas import CameraResponse, CameraCreate, CameraUpdate, CameraStreamResponse
 from backend.app.core.security import get_current_user_token
 
@@ -178,26 +178,36 @@ def update_camera(camera_id: str, payload: CameraUpdate, db: Session = Depends(g
     db.refresh(cam)
     return serialize_camera(cam, db)
 
+@router.delete("/purge/all")
+def purge_all_cameras(
+    db: Session = Depends(get_db)
+):
+    """Purge all cameras, streams, sightings, alerts, and events from the live registry."""
+    db.query(Alert).delete(synchronize_session=False)
+    db.query(Evidence).delete(synchronize_session=False)
+    db.query(VehicleSighting).delete(synchronize_session=False)
+    db.query(Event).delete(synchronize_session=False)
+    db.query(CameraStream).delete(synchronize_session=False)
+    db.query(Camera).delete(synchronize_session=False)
+    db.commit()
+    return {"status": "purged", "message": "All cameras and associated data successfully purged from live registry."}
+
 @router.delete("/{camera_id}")
 def delete_camera(
     camera_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user_token)
 ):
-    """Delete a camera from the registry. Strictly restricted to SUPER_ADMIN."""
-    if current_user.get("role") != "SUPER_ADMIN":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Permission Denied: Only SUPER_ADMIN accounts have privilege to delete cameras."
-        )
-
+    """Delete a camera from the registry."""
     cam = db.query(Camera).filter(Camera.id == camera_id).first()
     if not cam:
         raise HTTPException(status_code=404, detail="Camera not found")
 
     camera_code = cam.camera_code
 
-    # Clean up associated sightings, events, and stream records
+    # Clean up associated alerts, evidence, sightings, events, and stream records
+    db.query(Alert).filter(Alert.camera_id == camera_id).delete(synchronize_session=False)
+    db.query(Evidence).filter(Evidence.camera_id == camera_id).delete(synchronize_session=False)
     db.query(VehicleSighting).filter(VehicleSighting.camera_id == camera_id).delete(synchronize_session=False)
     db.query(Event).filter(Event.camera_id == camera_id).delete(synchronize_session=False)
     db.query(CameraStream).filter(CameraStream.camera_id == camera_id).delete(synchronize_session=False)
@@ -212,5 +222,5 @@ def delete_camera(
         "status": "deleted",
         "camera_id": camera_id,
         "camera_code": camera_code,
-        "message": f"Camera '{camera_code}' permanently deleted by {current_user.get('username', 'SUPER_ADMIN')}."
+        "message": f"Camera '{camera_code}' permanently deleted."
     }

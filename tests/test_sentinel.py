@@ -17,7 +17,19 @@ def db_session():
     db = SessionLocal()
     seed_database(db)
     yield db
-    db.close()
+    try:
+        from backend.app.models.models import Alert, Evidence, VehicleSighting, Event, Vehicle, WatchlistEntry, CameraStream, Camera
+        db.query(Alert).delete(synchronize_session=False)
+        db.query(Evidence).delete(synchronize_session=False)
+        db.query(VehicleSighting).delete(synchronize_session=False)
+        db.query(Event).delete(synchronize_session=False)
+        db.query(Vehicle).delete(synchronize_session=False)
+        db.query(WatchlistEntry).delete(synchronize_session=False)
+        db.query(CameraStream).delete(synchronize_session=False)
+        db.query(Camera).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
 
 def test_plate_normalization():
     raw = "dl-01-ab-1234"

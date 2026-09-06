@@ -17,7 +17,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     total_adapters = db.query(Adapter).count()
     departments_count = db.query(Department).count()
 
-    health_score = round((online_cameras / max(1, total_cameras)) * 100.0, 1)
+    health_score = 100.0 if total_cameras == 0 else round((online_cameras / total_cameras) * 100.0, 1)
 
     return DashboardStatsResponse(
         total_cameras=total_cameras,

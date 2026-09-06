@@ -79,6 +79,18 @@ export const api = {
     return res.json();
   },
 
+  async purgeAllCameras(): Promise<{ status: string; message: string }> {
+    const res = await fetch(`${API_BASE}/cameras/purge/all`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to purge cameras' }));
+      throw new Error(err.detail || 'Failed to purge cameras');
+    }
+    return res.json();
+  },
+
   async ingestCatalogue(): Promise<{ total_discovered: number; newly_registered: number; updated: number; items: Camera[] }> {
     const res = await fetch(`${API_BASE}/ingest`, { headers: getAuthHeaders() });
     if (!res.ok) throw new Error('Failed to synchronize government catalogue');

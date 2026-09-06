@@ -29,25 +29,3 @@ class PlateEngine:
 
         score = max(0.60, min(0.99, confidence))
         return formatted, clean, score
-
-    @classmethod
-    def simulate_ocr_read(cls, frame_bytes: bytes = None) -> Dict[str, Any]:
-        """Simulates OCR detection with bounding box and high confidence"""
-        sample_plates = [
-            ("DL-01-AB-1234", "White", "Toyota Fortuner", "SUV"),
-            ("MH-02-CD-5678", "Black", "Hyundai Creta", "SUV"),
-            ("KA-03-EF-9012", "Silver", "Honda City", "Sedan"),
-            ("HR-26-DK-8899", "Red", "Maruti Swift", "Hatchback"),
-            ("UP-16-AX-4321", "White", "Mahindra Scorpio", "SUV"),
-            ("RJ-14-GH-7788", "Blue", "Tata Nexon", "SUV")
-        ]
-        chosen = random.choice(sample_plates)
-        return {
-            "plate_number": chosen[0],
-            "normalized_plate": cls.clean_plate(chosen[0]),
-            "confidence": round(random.uniform(0.91, 0.99), 2),
-            "color": chosen[1],
-            "make_model": chosen[2],
-            "vehicle_type": chosen[3],
-            "bbox": [120, 340, 280, 410]
-        }
